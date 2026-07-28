@@ -32,28 +32,26 @@ class MCP_ChatBot:
 
         if query.startswith("search "):
             topic = query.replace("search ", "")
-
-            result = await self.session.call_tool(
+            session = self.tool_to_session.get("search_papers")
+            result = await session.call_tool(
                 "search_papers",
                 arguments={
                     "topic": topic,
                     "max_results": 5,
                 },
             )
-
             print("\nTool Result:")
             print(result)
 
         elif query.startswith("info "):
             paper_id = query.replace("info ", "")
-
-            result = await self.session.call_tool(
+            session = self.tool_to_session.get("extract_info")
+            result = await session.call_tool(
                 "extract_info",
                 arguments={
                     "paper_id": paper_id,
                 },
             )
-
             print("\nTool Result:")
             print(result)
 
@@ -104,7 +102,6 @@ class MCP_ChatBot:
 
             for tool in response.tools:
                 self.tool_to_session[tool.name] = session
-
                 self.available_tools.append(
                     {
                         "name": tool.name,
@@ -143,16 +140,13 @@ async def main():
     try:
         await bot.connect_to_servers()
 
-        # set default session to first connected session if available
         if bot.sessions:
             bot.session = bot.sessions[0]
 
         await bot.chat_loop()
     finally:
         await bot.cleanup()
-async def main():
 
-   if __name__ == "__main__":
+
+if __name__ == "__main__":
     asyncio.run(main())
-
-        
