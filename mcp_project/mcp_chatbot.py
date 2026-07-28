@@ -1,17 +1,24 @@
 import asyncio
-from typing import List
+from typing import List, Dict
 
+from anthropic import Anthropic
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from contextlib import AsyncExitStack
+import json
+
 
 load_dotenv()
-
 
 class MCP_ChatBot:
     def __init__(self):
         self.session: ClientSession = None
+        self.sessions = []
+        self.exit_stack = AsyncExitStack()
         self.available_tools: List[dict] = []
+        self.tool_to_session = {}
+        self.anthropic = Anthropic()
 
     async def process_query(self, query: str):
         """
@@ -70,37 +77,44 @@ class MCP_ChatBot:
 
             await self.process_query(query)
 
-    async def connect_to_server_and_run(self):
-        server_params = StdioServerParameters(
-            command="python",
-            args=["research_server.py"],
-            env=None,
+async def connect_to_server(self, server_name, server_config):
+    try:
+        server_params = StdioServerParameters(**server_config)
+
+        stdio_transport = await self.exit_stack.enter_async_context(
+            stdio_client(server_params)
         )
 
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                self.session = session
+        read, write = stdio_transport
 
-                await session.initialize()
+        session = await self.exit_stack.enter_async_context(
+            ClientSession(read, write)
+        )
 
-                response = await session.list_tools()
+        await session.initialize()
 
-                print(
-                    "\nConnected to server with tools:",
-                    [tool.name for tool in response.tools],
-                )
+        self.sessions.append(session)
 
-                self.available_tools = [
-                    {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "input_schema": tool.inputSchema,
-                    }
-                    for tool in response.tools
-                ]
+        response = await session.list_tools()
 
-                await self.chat_loop()
+        print(
+            f"\nConnected to {server_name} with tools:",
+            [tool.name for tool in response.tools],
+        )
 
+        for tool in response.tools:
+            self.tool_to_session[tool.name] = session
+
+            self.available_tools.append(
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "input_schema": tool.inputSchema,
+                }
+            )
+
+    except Exception as e:
+        print(f"Failed to connect to {server_name}: {e}")
 
 async def main():
     chatbot = MCP_ChatBot()
