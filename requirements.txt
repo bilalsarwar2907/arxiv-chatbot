@@ -1,0 +1,6 @@
+anthropic
+arxiv
+python-dotenv
+openai
+mcp
+nest_asyncio
