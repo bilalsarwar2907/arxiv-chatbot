@@ -13,8 +13,8 @@
       "args": ["run", "research_server.py"]
     },
    "fetch": {
-  "command": "uvx",
-  "args": ["mcp-server-fetch"]
+    "command": "C:\\Users\\biges\\arxiv-chatbot\\venv\\Scripts\\python.exe",
+    "args": ["-m", "mcp_server_fetch"]
 }
   }
 }
