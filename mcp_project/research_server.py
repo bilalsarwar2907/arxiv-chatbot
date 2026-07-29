@@ -29,6 +29,64 @@ PAPER_DIR = "papers"  # Root directory where all paper data is stored
 
 mcp = FastMCP("research")
 
+@mcp.resource("papers://folders")
+def get_available_folders() -> str:
+    folders = []
+
+    if os.path.exists(PAPER_DIR):
+        for topic_dir in os.listdir(PAPER_DIR):
+            topic_path = os.path.join(PAPER_DIR, topic_dir)
+
+            if os.path.isdir(topic_path):
+                papers_file = os.path.join(topic_path, "papers_info.json")
+
+                if os.path.exists(papers_file):
+                    folders.append(topic_dir)
+
+    content = "# Available Topics\n\n"
+
+    if folders:
+        for folder in folders:
+            content += f"- {folder}\n"
+    else:
+        content += "No topics found.\n"
+
+    return content
+
+@mcp.resource("papers://{topic}")
+def get_topic_papers(topic: str) -> str:
+    topic_dir = topic.lower().replace(" ", "_")
+    papers_file = os.path.join(PAPER_DIR, topic_dir, "papers_info.json")
+
+    if not os.path.exists(papers_file):
+        return f"# No papers found for topic: {topic}"
+
+    with open(papers_file, "r", encoding="utf-8") as f:
+        papers_data = json.load(f)
+
+    content = f"# Papers on {topic}\n\n"
+
+    for paper_id, paper_info in papers_data.items():
+        content += f"## {paper_info['title']}\n"
+        content += f"- Paper ID: {paper_id}\n\n"
+
+    return content
+
+@mcp.prompt()
+def generate_search_prompt(topic: str, num_papers: int = 5) -> str:
+    return f"""
+Search for {num_papers} academic papers about '{topic}' using the search_papers tool.
+
+1. Search for papers on '{topic}'
+2. For each paper provide:
+   - Title
+   - Authors
+   - Publication date
+   - Summary
+
+3. Provide an overall summary of the research area.
+"""
+
 # ============================================================================
 #  Tool 1: Search for Papers on arXiv
 # ============================================================================
