@@ -9,8 +9,8 @@
       ]
     },
     "research": {
-      "command": "uv",
-      "args": ["run", "research_server.py"]
+      "command": "C:\\Users\\biges\\arxiv-chatbot\\venv\\Scripts\\python.exe",
+      "args": ["research_server.py"]
     },
    "fetch": {
     "command": "C:\\Users\\biges\\arxiv-chatbot\\venv\\Scripts\\python.exe",
