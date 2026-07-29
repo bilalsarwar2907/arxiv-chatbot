@@ -27,7 +27,7 @@ PAPER_DIR = "papers"  # Root directory where all paper data is stored
 #  MCP Server Initialisation
 # ============================================================================
 
-mcp = FastMCP("research")
+mcp = FastMCP("research", port=8001)
 
 @mcp.resource("papers://folders")
 def get_available_folders() -> str:
@@ -219,4 +219,4 @@ def extract_info(paper_id: str) -> str:
 
 if __name__ == "__main__":
     # Start the MCP server using stdio transport (the default for MCP)
-    mcp.run(transport="stdio")
+    mcp.run(transport='sse')
