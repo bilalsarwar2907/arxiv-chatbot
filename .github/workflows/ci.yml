@@ -74,8 +74,8 @@ jobs:
       - name: Verify mcp version
         run: |
           python -c "
-          import mcp
-          version = mcp.__version__
+          import importlib.metadata
+          version = importlib.metadata.version('mcp')
           print(f'mcp version: {version}')
           assert version == '1.28.1', f'FAIL: expected 1.28.1, got {version}'
           print('mcp version check PASSED')
