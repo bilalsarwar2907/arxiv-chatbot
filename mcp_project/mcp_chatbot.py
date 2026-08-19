@@ -1,8 +1,8 @@
 import os
 import asyncio
-from typing import List, Dict
+from typing import List
 
-from anthropic import Anthropic
+from openai import OpenAI
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -21,53 +21,83 @@ class MCP_ChatBot:
         self.available_prompts: List = []
         self.tool_to_session = {}
         self.resource_to_session = {}
-        self.anthropic = Anthropic(
+        self.prompt_to_session = {}
+        self.client = OpenAI(
             api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api",
+            base_url="https://openrouter.ai/api/v1",
         )
 
     async def process_query(self, query: str):
         messages = [{"role": "user", "content": query}]
-        response = self.anthropic.messages.create(
+
+        # Convert MCP tool format (input_schema) → OpenAI function format (parameters)
+        openai_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "parameters": t["input_schema"],
+                },
+            }
+            for t in self.available_tools
+        ]
+
+        response = self.client.chat.completions.create(
             model="anthropic/claude-opus-4-5",
             max_tokens=1024,
-            tools=self.available_tools,
+            tools=openai_tools,
             messages=messages,
         )
 
-        while response.stop_reason == "tool_use":
-            tool_use = next(b for b in response.content if b.type == "tool_use")
-            tool_name = tool_use.name
-            tool_args = tool_use.input
+        while response.choices[0].finish_reason == "tool_calls":
+            assistant_message = response.choices[0].message
 
-            session = self.tool_to_session.get(tool_name)
-            result = await session.call_tool(tool_name, arguments=tool_args)
+            # Append the full assistant turn (including all tool calls) to history
+            messages.append({
+                "role": "assistant",
+                "content": assistant_message.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in assistant_message.tool_calls
+                ],
+            })
 
-            messages = [
-                {"role": "user", "content": query},
-                {"role": "assistant", "content": response.content},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": result.content,
-                        }
-                    ],
-                },
-            ]
+            # Execute every tool call in this turn and append each result
+            for tool_call in assistant_message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
 
-            response = self.anthropic.messages.create(
+                session = self.tool_to_session.get(tool_name)
+                if not session:
+                    result_text = f"Error: no session registered for tool '{tool_name}'"
+                else:
+                    result = await session.call_tool(tool_name, arguments=tool_args)
+                    result_text = "\n".join(
+                        c.text for c in result.content if hasattr(c, "text")
+                    )
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result_text,
+                })
+
+            response = self.client.chat.completions.create(
                 model="anthropic/claude-opus-4-5",
                 max_tokens=1024,
-                tools=self.available_tools,
+                tools=openai_tools,
                 messages=messages,
             )
 
-        final_response = next(
-            (b.text for b in response.content if hasattr(b, "text")), None
-        )
+        final_response = response.choices[0].message.content
         print(f"\nResponse: {final_response}")
 
     async def list_prompts(self):
@@ -121,14 +151,11 @@ class MCP_ChatBot:
                 key, value = part.split("=", 1)
                 args[key] = value
 
-        # find a session that has this prompt
-        session = None
-        for s in self.sessions:
-            session = s
-            break
-
+        # find the session that registered this prompt
+        session = self.prompt_to_session.get(prompt_name)
         if not session:
-            print(f"\nNo session available.")
+            print(f"\nNo session found for prompt: {prompt_name}")
+            print(f"Available prompts: {list(self.prompt_to_session.keys())}")
             return
 
         try:
@@ -201,6 +228,7 @@ class MCP_ChatBot:
                 prompts = await session.list_prompts()
                 for prompt in prompts.prompts:
                     self.available_prompts.append(prompt)
+                    self.prompt_to_session[prompt.name] = session
             except Exception:
                 pass
 

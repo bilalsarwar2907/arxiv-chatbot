@@ -1,6 +1,11 @@
-anthropic
-arxiv
-python-dotenv
-openai
-mcp
-nest_asyncio
+# Direct dependencies — pinned to versions verified working together.
+# CRITICAL: Do NOT upgrade mcp beyond 1.28.1. Version 2.0.0 introduces
+# breaking changes that break the filesystem and mcp-server-fetch servers.
+
+anthropic==0.120.0
+arxiv==4.0.0
+python-dotenv==1.2.2
+openai==2.48.0
+mcp==1.28.1
+nest_asyncio==1.6.0
+mcp-server-fetch==2025.1.17

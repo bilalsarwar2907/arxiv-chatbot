@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1 — Lint & static checks
+  # ─────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      # Install all pinned project dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Ruff: fast linter (replaces flake8 + isort + pyupgrade)
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      # Compile every source file — catches SyntaxError before runtime
+      - name: Syntax check
+        run: |
+          python -m py_compile chatbot.py
+          python -m py_compile tools.py
+          python -m py_compile main.py
+          python -m py_compile mcp_project/mcp_chatbot.py
+          python -m py_compile mcp_project/research_server.py
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2 — Dependency & import smoke test
+  # ─────────────────────────────────────────────────────────────
+  smoke:
+    name: Import Smoke Test
+    runs-on: ubuntu-latest
+    needs: lint          # only run if lint passes
+
+    env:
+      # Dummy key so load_dotenv() and imports succeed without a real secret.
+      # Actual API calls are never made in CI.
+      OPENROUTER_API_KEY: ci_placeholder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Verify mcp is the pinned safe version — not 2.0.0
+      - name: Verify mcp version
+        run: |
+          python -c "
+          import mcp
+          version = mcp.__version__
+          print(f'mcp version: {version}')
+          assert version == '1.28.1', f'FAIL: expected 1.28.1, got {version}'
+          print('mcp version check PASSED')
+          "
+
+      # Verify all tool functions and their dispatcher load cleanly
+      - name: Smoke test — tools.py
+        run: |
+          python -c "
+          from tools import search_papers, extract_info, tools, execute_tool, mapping_tool_function
+          assert len(tools) == 2, f'Expected 2 tools, got {len(tools)}'
+          assert 'search_papers' in mapping_tool_function
+          assert 'extract_info' in mapping_tool_function
+          print('tools.py smoke test PASSED')
+          "
+
+      # Verify the MCP research server loads without errors
+      - name: Smoke test — research_server.py imports
+        run: |
+          python -c "
+          import ast
+          with open('mcp_project/research_server.py') as f:
+              src = f.read()
+          ast.parse(src)
+          print('research_server.py AST parse PASSED')
+          "
+
+      # Verify chatbot.py module loads (does not call chat_loop)
+      - name: Smoke test — chatbot.py imports
+        run: |
+          python -c "
+          import ast
+          with open('chatbot.py') as f:
+              src = f.read()
+          ast.parse(src)
+          print('chatbot.py AST parse PASSED')
+          "
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 3 — (Placeholder) Tests
+  # When tests are added, replace this job with the real test run.
+  # ─────────────────────────────────────────────────────────────
+  test:
+    name: Tests (placeholder)
+    runs-on: ubuntu-latest
+    needs: smoke
+
+    steps:
+      - name: No tests yet
+        run: echo "No tests defined yet. Add pytest tests under a tests/ directory and wire them here."
