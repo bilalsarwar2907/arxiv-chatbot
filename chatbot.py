@@ -22,37 +22,77 @@ client = OpenAI(
 )
 
 # ============================================================
+# Convert tools to OpenAI format
+# tools.py uses Anthropic format (input_schema); OpenAI expects
+# {"type": "function", "function": {"name", "description", "parameters"}}
+# ============================================================
+
+openai_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": t["name"],
+            "description": t["description"],
+            "parameters": t["input_schema"],
+        },
+    }
+    for t in tools
+]
+
+# ============================================================
 # Get Response
 # ============================================================
 
-def get_response(user_message: str) -> str:
+
+def get_response(messages: list) -> str:
     response = client.chat.completions.create(
         model="anthropic/claude-sonnet-4",
-        max_tokens=300,
-        messages=[
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        ],
-        tools=tools,
+        max_tokens=1024,
+        messages=messages,
+        tools=openai_tools,
     )
 
     message = response.choices[0].message
 
-    # Normal response
-    if not getattr(message, "tool_calls", None):
+    # No tool call — plain text response
+    if response.choices[0].finish_reason != "tool_calls":
         return message.content
 
-    # Tool call
-    tool_call = message.tool_calls[0]
+    # Tool call — execute and send result back to Claude
+    messages.append({
+        "role": "assistant",
+        "content": message.content,
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            }
+            for tc in message.tool_calls
+        ],
+    })
 
-    tool_name = tool_call.function.name
-    tool_args = json.loads(tool_call.function.arguments)
+    for tool_call in message.tool_calls:
+        tool_name = tool_call.function.name
+        tool_args = json.loads(tool_call.function.arguments)
+        result = execute_tool(tool_name, tool_args)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": result,
+        })
 
-    result = execute_tool(tool_name, tool_args)
-
-    return result
+    # Second call — Claude summarises the tool result
+    follow_up = client.chat.completions.create(
+        model="anthropic/claude-sonnet-4",
+        max_tokens=1024,
+        messages=messages,
+        tools=openai_tools,
+    )
+    return follow_up.choices[0].message.content
 
 
 # ============================================================
@@ -60,6 +100,8 @@ def get_response(user_message: str) -> str:
 # ============================================================
 
 def chat_loop():
+    messages = []
+
     while True:
         user_message = input("\nYou: ")
 
@@ -67,7 +109,9 @@ def chat_loop():
             print("Goodbye!")
             break
 
-        response = get_response(user_message)
+        messages.append({"role": "user", "content": user_message})
+        response = get_response(messages)
+        messages.append({"role": "assistant", "content": response})
 
         print("\nAssistant:")
         print(response)
