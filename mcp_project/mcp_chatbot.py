@@ -22,13 +22,28 @@ class MCP_ChatBot:
         self.tool_to_session = {}
         self.resource_to_session = {}
         self.prompt_to_session = {}
+        # I-002: system prompt — establishes the assistant's role at the start
+        # I-001: self.messages persists across turns, giving the model full history
+        self.messages: List[dict] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a research assistant specialising in academic papers. "
+                    "You can search arXiv for papers on any topic, retrieve stored "
+                    "paper metadata, fetch web content, and manage local files. "
+                    "Always use your tools to find accurate, up-to-date information "
+                    "rather than relying on prior knowledge alone."
+                ),
+            }
+        ]
         self.client = OpenAI(
             api_key=os.environ.get("OPENROUTER_API_KEY"),
             base_url="https://openrouter.ai/api/v1",
         )
 
     async def process_query(self, query: str):
-        messages = [{"role": "user", "content": query}]
+        # I-001: append to self.messages so the full conversation history is sent
+        self.messages.append({"role": "user", "content": query})
 
         # Convert MCP tool format (input_schema) → OpenAI function format (parameters)
         openai_tools = [
@@ -47,14 +62,14 @@ class MCP_ChatBot:
             model="anthropic/claude-opus-4-5",
             max_tokens=1024,
             tools=openai_tools,
-            messages=messages,
+            messages=self.messages,
         )
 
         while response.choices[0].finish_reason == "tool_calls":
             assistant_message = response.choices[0].message
 
             # Append the full assistant turn (including all tool calls) to history
-            messages.append({
+            self.messages.append({
                 "role": "assistant",
                 "content": assistant_message.content,
                 "tool_calls": [
@@ -84,7 +99,7 @@ class MCP_ChatBot:
                         c.text for c in result.content if hasattr(c, "text")
                     )
 
-                messages.append({
+                self.messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result_text,
@@ -94,10 +109,12 @@ class MCP_ChatBot:
                 model="anthropic/claude-opus-4-5",
                 max_tokens=1024,
                 tools=openai_tools,
-                messages=messages,
+                messages=self.messages,
             )
 
         final_response = response.choices[0].message.content
+        # Persist the final assistant reply so follow-up questions have context
+        self.messages.append({"role": "assistant", "content": final_response})
         print(f"\nResponse: {final_response}")
 
     async def list_prompts(self):

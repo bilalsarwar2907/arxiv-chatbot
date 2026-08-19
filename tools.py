@@ -139,17 +139,27 @@ mapping_tool_function = {
 }
 
 def execute_tool(tool_name, tool_args):
-    result = mapping_tool_function[tool_name](**tool_args)
+    # I-003: guard against unknown tool names
+    if tool_name not in mapping_tool_function:
+        return (
+            f"Error: unknown tool '{tool_name}'. "
+            f"Available tools: {list(mapping_tool_function.keys())}"
+        )
+
+    # I-003: guard against bad arguments or runtime errors in the tool itself
+    try:
+        result = mapping_tool_function[tool_name](**tool_args)
+    except TypeError as e:
+        return f"Error: invalid arguments for tool '{tool_name}': {e}"
+    except Exception as e:
+        return f"Error executing tool '{tool_name}': {e}"
 
     if result is None:
         result = "The operation completed but didn't return any results."
-
     elif isinstance(result, list):
         result = ", ".join(result)
-
     elif isinstance(result, dict):
         result = json.dumps(result, indent=2)
-
     else:
         result = str(result)
 
