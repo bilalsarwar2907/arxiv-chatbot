@@ -91,17 +91,14 @@ def search_papers(topic: str, max_results: int = 5) -> List[str]:
 
     return paper_ids
 
-# search_papers()
-...
-
-# extract_info()
-...
 
 # Tool Definitions
 tools = [
     {
         "name": "search_papers",
-        "description": "Search for papers on arXiv based on a topic and store their information.",
+        "description": (
+            "Search for papers on arXiv based on a topic and store their information."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -120,7 +117,10 @@ tools = [
     },
     {
         "name": "extract_info",
-        "description": "Search for information about a specific paper across all topic directories.",
+        "description": (
+            "Search for information about a specific paper"
+            " across all topic directories."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {

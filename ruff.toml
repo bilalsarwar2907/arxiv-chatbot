@@ -1,0 +1,16 @@
+# ruff.toml — project linting configuration
+# Pinned rule set so CI results are deterministic across ruff versions.
+
+[lint]
+# E: pycodestyle errors
+# F: pyflakes (unused imports, undefined names, etc.)
+# W: pycodestyle warnings
+select = ["E", "F", "W"]
+
+# Exclude auto-generated and third-party directories
+exclude = [
+    ".git",
+    ".ruff_cache",
+    "venv",
+    "__pycache__",
+]
